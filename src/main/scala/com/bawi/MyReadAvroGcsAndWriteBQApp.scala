@@ -1,10 +1,14 @@
 package com.bawi
 
 import org.apache.spark.sql.SaveMode
+import org.slf4j.LoggerFactory
 
 object MyReadAvroGcsAndWriteBQApp {
+  private val LOGGER = LoggerFactory.getLogger(MyReadAvroGcsAndWriteBQApp.getClass)
 
   def main(args: Array[String]): Unit = {
+    LOGGER.info("GOOGLE_APPLICATION_CREDENTIALS={}", System.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
+
     val spark = SparkUtils.createSpark(getClass, args)
     val dataDF = spark.read.format("avro")
       .load("gs://" + spark.conf.get("projectId") + "-bartek-dataproc/myRecord.snappy.avro")

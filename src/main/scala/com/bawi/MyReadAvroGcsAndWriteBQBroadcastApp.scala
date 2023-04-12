@@ -9,6 +9,8 @@ object MyReadAvroGcsAndWriteBQBroadcastApp {
   private val LOGGER = LoggerFactory.getLogger(MyReadAvroGcsAndWriteBQBroadcastApp.getClass)
 
   def main(args: Array[String]): Unit = {
+    LOGGER.info("GOOGLE_APPLICATION_CREDENTIALS={}", System.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
+
     val spark = SparkUtils.createSpark(getClass, args)
     import spark.implicits._
 
