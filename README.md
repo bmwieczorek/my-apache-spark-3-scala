@@ -35,6 +35,11 @@ gcloud dataproc jobs submit spark --cluster=bartek-beam-on-spark --region=us-cen
 
 Logging:
 # query spark container logs in logs explorer
+resource.labels.job_id="4220aac1746d4d5195e69ec649459d06"
+resource.type="cloud_dataproc_job"
+(jsonPayload.class=~"com.*" OR jsonPayload.class=~"org.*")
+
+
 LABELS_JOB_NAME=bartek-myreadavrogcsandwritebqbroadcastapp && \
 CLUSTER_NAME=bartek-beam-on-spark && \
 START_TIME="$(date -u -v-1M '+%Y-%m-%dT%H:%M:%SZ')" && \
