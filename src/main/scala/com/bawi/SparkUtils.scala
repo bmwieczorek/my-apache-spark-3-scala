@@ -24,11 +24,11 @@ object SparkUtils {
       if (!sparkConf.contains("projectId"))
         sparkConf.set("projectId", System.getenv("GCP_PROJECT"))
     }
-    sparkConf.set("fs.gs.impl", "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem")
-    sparkConf.set("fs.AbstractFileSystem.gs.impl", "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS")
-    if (sparkConf.contains("projectId")) {
-        sparkConf.set("fs.gs.project.id", sparkConf.get("projectId"))
-    }
+//    sparkConf.set("fs.gs.impl", "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem")
+//    sparkConf.set("fs.AbstractFileSystem.gs.impl", "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS")
+//    if (sparkConf.contains("projectId")) {
+//        sparkConf.set("fs.gs.project.id", sparkConf.get("projectId"))
+//    }
     LOGGER.info("Setting Spark conf: {}", sparkConf.getAll.map(e => e._1 + "=" + e._2))
     SparkSession.builder().config(sparkConf).getOrCreate()
   }
@@ -36,9 +36,5 @@ object SparkUtils {
   private def isLocal: Boolean = {
     val osName = System.getProperty("os.name").toLowerCase
     osName.contains("mac") || osName.contains("windows")
-  }
-
-  def assertNotNullAndGet(arg: Any): Any = {
-    if (arg == null) throw new IllegalArgumentException("Argument " + arg + " should not be null!")
   }
 }

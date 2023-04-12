@@ -1,6 +1,4 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
-
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.bawi</groupId>
     <artifactId>my-apache-spark-3-scala</artifactId>
@@ -8,12 +6,229 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <!-- jar versions matching https://cloud.google.com/dataproc/docs/concepts/versioning/dataproc-release-2.0, image-version 2.0.58-debian10 -->
         <spark.version>3.1.3</spark.version>
-        <cluster.provided.dependencies.scope>compile</cluster.provided.dependencies.scope>
+        <java.version>1.8</java.version>
+        <scala.major.version>2.12</scala.major.version>
+        <scala.minor.version>14</scala.minor.version>
+        <gcs-connector.version>hadoop3-2.2.11</gcs-connector.version> <!-- up to hadoop3-2.2.4 no dependency on com.google.protobuf.ExtensionLite -->
 
         <!-- use gcloud dataproc jobs submit spark: - -properties ^#^spark.jars.packages=org.apache.spark:spark-avro_2.12:3.1.3,com.google.cloud.spark:spark-bigquery-with-dependencies_2.12:0.29.0#spark.dynamicAllocation.enabled=true ... -->
-        <spark.submit.packages.dependencies.scope>compile</spark.submit.packages.dependencies.scope>
+        <dataproc.provided.dependencies.scope>compile</dataproc.provided.dependencies.scope>
     </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scala-library</artifactId>
+            <version>${scala.major.version}.${scala.minor.version}</version>
+            <scope>${dataproc.provided.dependencies.scope}</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-core_${scala.major.version}</artifactId>
+            <version>${spark.version}</version>
+            <scope>${dataproc.provided.dependencies.scope}</scope>
+        </dependency>
+
+        <!-- org.apache.spark:spark-sql_2.12:jar:3.1.3 depends transitively on old com.google.protobuf:protobuf-java:jar:2.5.0 (does not depend on io-grpc) -->
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-sql_${scala.major.version}</artifactId>
+            <version>${spark.version}</version>
+            <scope>${dataproc.provided.dependencies.scope}</scope>
+        </dependency>
+
+        <!-- read/write avro files, registers avro format -->
+        <!-- otherwise: Exception in thread "main" org.apache.spark.sql.AnalysisException: Failed to find data source: avro. Avro is built-in but external data source module since Spark 2.4. Please deploy the application as per the deployment section of "Apache Avro Data Source Guide". -->
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-avro_${scala.major.version}</artifactId>
+            <version>${spark.version}</version>
+            <scope>${dataproc.provided.dependencies.scope}</scope>
+        </dependency>
+
+        <!-- com.google.cloud.spark.bigquery.SupportedCustomDataType imports org.apache.spark.ml.linalg.SQLDataTypes -->
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-mllib_${scala.major.version}</artifactId>
+            <version>${spark.version}</version>
+            <scope>${dataproc.provided.dependencies.scope}</scope>
+        </dependency>
+    </dependencies>
+
+    <profiles>
+        <profile>
+            <!-- should be disabled when using local-with-approximate-dependencies-and-source-code -->
+            <id>local-with-dataproc-matching-shaded-dependencies</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <properties>
+                <dataproc.provided.dependencies.scope>compile</dataproc.provided.dependencies.scope>
+            </properties>
+
+            <!-- use gcloud dataproc jobs submit spark: - -properties ^#^spark.jars.packages=org.apache.spark:spark-avro_2.12:3.1.3,com.google.cloud.spark:spark-bigquery-with-dependencies_2.12:0.29.0#spark.dynamicAllocation.enabled=true ... -->
+            <dependencies>
+                <!-- read/write GCS, com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem registers extends FileSystem, registers gs scheme -->
+                <!-- otherwise: Exception in thread "main" org.apache.hadoop.fs.UnsupportedFileSystemException: No FileSystem for scheme "gs"
+                    at org.apache.hadoop.fs.FileSystem.getFileSystemClass(FileSystem.java:3281) -->
+
+                <!-- make sure to set environment variable GOOGLE_APPLICATION_CREDENTIALS=/path/to/application_default_credentials.json as explained in
+                https://cloud.google.com/docs/authentication/application-default-credentials
+                to avoid waiting with connection timeout:
+                    Exception in thread "main" java.io.IOException: Error getting access token from metadata server at: http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token
+                        at com.google.cloud.hadoop.repackaged.gcs.com.google.cloud.hadoop.util.CredentialFactory.getCredentialFromMetadataServiceAccount(CredentialFactory.java:254)
+                        at com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystemBase.getCredential(GoogleHadoopFileSystemBase.java:1344)
+                        at org.apache.hadoop.fs.FileSystem.createFileSystem(FileSystem.java:3303)
+                    Caused by: java.net.SocketTimeoutException: connect timed out
+                        at com.google.cloud.hadoop.repackaged.gcs.com.google.api.client.http.HttpRequest.execute(HttpRequest.java:1012)
+                        at com.google.cloud.hadoop.repackaged.gcs.com.google.cloud.hadoop.util.CredentialFactory.getCredentialFromMetadataServiceAccount(CredentialFactory.java:251)
+                -->
+                <!-- use shaded classifier to download gcs-connector-hadoop3-2.2.11-shaded.jar
+                uberjar with repackaged/shaded some dependencies (eg. com.google.protobuf.ExtensionLite -> com.google.cloud.hadoop.repackaged.gcs.com.google.protobuf.ExtensionLite)
+                instead of gcs-connector-hadoop3-2.2.11.jar and gcs-connector-hadoop3-2.2.11-sources.jar
+                otherwise:
+                    FileSystem:3231 - Cannot load filesystem: java.util.ServiceConfigurationError: org.apache.hadoop.fs.FileSystem: Provider com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem could not be instantiated
+                    FileSystem:3235 - java.lang.NoClassDefFoundError: com/google/protobuf/ExtensionLite
+                    FileSystem:3235 - java.lang.ClassNotFoundException: com.google.protobuf.ExtensionLite
+                -->
+                <!-- to see conflicts comment shaded classifier and run: mvn dependency:tree -Dverbose
+
+                org.apache.spark:spark-sql_2.12:jar:3.1.3 transitively brings old com.google.protobuf:protobuf-java:jar:2.5.0
+                so that new com.google.protobuf:protobuf-java:jar:3.21.7 from com.google.cloud.bigdataoss:gcs-connector:jar:hadoop3-2.2.11
+                and new com.google.protobuf:protobuf-java:jar:3.21.12 from com.google.cloud.spark:spark-3.1-bigquery:jar:0.29.0-preview are omitted
+
+                com.google.cloud.bigdataoss:gcs-connector:jar:hadoop3-2.2.11 transitively brings io.grpc:grpc-..:jar:1.50.2
+                com.google.cloud.spark:spark-3.1-bigquery:jar:0.29.0-preview depends on io.grpc: 1.52.1 and 1.53.0
+                 -->
+                <dependency>
+                    <groupId>com.google.cloud.bigdataoss</groupId>
+                    <artifactId>gcs-connector</artifactId>
+                    <version>${gcs-connector.version}</version>
+                    <scope>${dataproc.provided.dependencies.scope}</scope>
+                    <classifier>shaded</classifier>
+                </dependency>
+
+                <!-- uberjar with repackaged dependencies to avoid conflicts -->
+                <!-- use gcloud dataproc jobs submit spark: - -properties spark.jars.packages=org.apache.spark:spark-avro_2.12:3.1.3 -->
+                <dependency>
+                    <groupId>com.google.cloud.spark</groupId>
+                    <artifactId>spark-bigquery-with-dependencies_2.12</artifactId>
+                    <version>0.29.0</version>
+                    <scope>${dataproc.provided.dependencies.scope}</scope>
+                </dependency>
+            </dependencies>
+        </profile>
+
+        <profile>
+            <!-- should be disabled when using local-with-dataproc-matching-shaded-dependencies -->
+            <id>local-with-approximate-dependencies-and-source-code</id>
+            <properties>
+                <dataproc.provided.dependencies.scope>compile</dataproc.provided.dependencies.scope>
+                <!-- choosing latest grpc and protobuf-java among gcs-connector and spark-3.1-bigquery -->
+                <grpc.version>1.53.0</grpc.version>
+                <protobuf-java.version>3.21.12</protobuf-java.version>
+            </properties>
+            <dependencies>
+
+                <!-- com.google.cloud.bigdataoss:gcs-connector:jar:hadoop3-2.2.11 (without shaded classifier)
+                  depends transitively on com.google.protobuf:protobuf-java-(util):jar:3.21.9 and io.grpc:grpc-..:jar:1.50.2
+                  BUT com.google.protobuf:protobuf-java:jar:3.21.9 is OMITTED due to conflict with 2.5.0 from spark_sql
+                  -->
+                <dependency>
+                    <groupId>com.google.cloud.bigdataoss</groupId>
+                    <artifactId>gcs-connector</artifactId>
+                    <version>${gcs-connector.version}</version>
+                    <scope>${dataproc.provided.dependencies.scope}</scope>
+                </dependency>
+
+                <!-- com.google.cloud.spark:spark-3.1-bigquery:jar:0.29.0-preview depends on io.grpc: 1.52.1 and 1.53.0
+                    e.g. io.grpc:grpc-context:jar:1.52.1 and io.grpc:grpc-api:jar:1.53.0:compile
+                    and com.google.protobuf:protobuf-java-(util):jar:3.21.12
+                    BUT com.google.protobuf:protobuf-java:jar:3.21.12 is OMITTED due to conflict with 2.5.0 from spark_sql -->
+                <dependency>
+                    <groupId>com.google.cloud.spark</groupId>
+                    <artifactId>spark-3.1-bigquery</artifactId>
+                    <version>0.29.0-preview</version>
+                    <scope>${dataproc.provided.dependencies.scope}</scope>
+                </dependency>
+            </dependencies>
+
+            <!-- Could not resolve version conflict among for io.grpc:grpc-core:jar:[1.53.0,1.53.0] and io.grpc:grpc-core:jar:[1.50.2,1.50.2]
+            due transitive grpc netty specifying explicit single version of dependency in square brackets for grpc-core and grpc-api:
+            io.grpc:grpc-netty:jar:1.53.0 (from spark-3.1-bigquery) -> io.grpc:grpc-core:jar:[1.53.0,1.53.0]
+            io.grpc:grpc-netty-shaded:jar:1.50.2 (from gcs-connector) -> io.grpc:grpc-core:jar:[1.50.2,1.50.2] -->
+            <dependencyManagement>
+                <dependencies>
+                    <dependency>
+                        <groupId>io.grpc</groupId>
+                        <artifactId>grpc-core</artifactId>
+                        <version>${grpc.version}</version>
+                        <scope>${dataproc.provided.dependencies.scope}</scope>
+                    </dependency>
+                    <dependency>
+                        <groupId>io.grpc</groupId>
+                        <artifactId>grpc-api</artifactId>
+                        <version>${grpc.version}</version>
+                        <scope>${dataproc.provided.dependencies.scope}</scope>
+                    </dependency>
+                    <dependency>
+                        <groupId>com.google.protobuf</groupId>
+                        <artifactId>protobuf-java</artifactId>
+                        <version>${protobuf-java.version}</version>
+                        <scope>${dataproc.provided.dependencies.scope}</scope>
+                    </dependency>
+                </dependencies>
+            </dependencyManagement>
+        </profile>
+
+        <profile>
+            <id>dist</id>
+            <properties>
+                <dataproc.provided.dependencies.scope>provided</dataproc.provided.dependencies.scope>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-shade-plugin</artifactId>
+                        <version>3.4.1</version>
+                        <executions>
+                            <execution>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>shade</goal>
+                                </goals>
+                                <configuration>
+                                    <createDependencyReducedPom>false</createDependencyReducedPom>
+                                    <artifactSet>
+                                        <excludes>
+                                            <exclude>org.scala-lang:*</exclude>
+                                        </excludes>
+                                    </artifactSet>
+                                </configuration>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
     <build>
         <pluginManagement>
@@ -23,8 +238,8 @@
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>3.11.0</version>
                     <configuration>
-                        <source>1.8</source>
-                        <target>1.8</target>
+                        <source>${java.version}</source>
+                        <target>${java.version}</target>
                     </configuration>
                 </plugin>
             </plugins>
@@ -72,152 +287,7 @@
                     </execution>
                 </executions>
             </plugin>
-
-<!--            <plugin>-->
-<!--                <groupId>org.apache.maven.plugins</groupId>-->
-<!--                <artifactId>maven-enforcer-plugin</artifactId>-->
-<!--                <version>3.3.0</version>-->
-<!--                <executions>-->
-<!--                    <execution>-->
-<!--                        <id>enforce</id>-->
-<!--                        <configuration>-->
-<!--                            <rules>-->
-<!--                                <DependencyConvergence/>-->
-<!--                            </rules>-->
-<!--                        </configuration>-->
-<!--                        <goals>-->
-<!--                            <goal>enforce</goal>-->
-<!--                        </goals>-->
-<!--                    </execution>-->
-<!--                </executions>-->
-<!--            </plugin>-->
-
         </plugins>
     </build>
 
-    <dependencies>
-        <dependency>
-            <groupId>org.scala-lang</groupId>
-            <artifactId>scala-library</artifactId>
-            <version>2.12.14</version>
-            <scope>${cluster.provided.dependencies.scope}</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.spark</groupId>
-            <artifactId>spark-core_2.12</artifactId>
-            <version>${spark.version}</version>
-            <scope>${cluster.provided.dependencies.scope}</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.spark</groupId>
-            <artifactId>spark-sql_2.12</artifactId>
-            <version>${spark.version}</version>
-            <scope>${cluster.provided.dependencies.scope}</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.spark</groupId>
-            <artifactId>spark-avro_2.12</artifactId>
-            <version>${spark.version}</version>
-            <scope>${spark.submit.packages.dependencies.scope}</scope>
-        </dependency>
-
-        <!-- used to read from gcs, hadoop version 3 as defined in https://cloud.google.com/dataproc/docs/concepts/versioning/dataproc-release-2.0 -->
-        <dependency>
-            <groupId>com.google.cloud.bigdataoss</groupId>
-            <artifactId>gcs-connector</artifactId>
-            <version>hadoop3-2.2.4</version> <!-- newer version than hadoop3-2.2.4 require declaring explicitly latest com.google.cloud:google-cloud-storage pom.xml -->
-            <scope>${spark.submit.packages.dependencies.scope}</scope>
-        </dependency>
-
-        <!-- fat jar to avoid conflicts -->
-<!--        <dependency>-->
-<!--            <groupId>com.google.cloud.spark</groupId>-->
-<!--            <artifactId>spark-bigquery-with-dependencies_2.12</artifactId>-->
-<!--            <version>0.29.0</version>-->
-<!--            <scope>${cluster.provided.dependencies.scope}</scope>-->
-<!--        </dependency>-->
-
-        <!-- conflicts with gcs-connector -->
-        <dependency>
-            <groupId>com.google.cloud.spark</groupId>
-            <artifactId>spark-3.1-bigquery</artifactId>
-            <version>0.29.0-preview</version>
-            <scope>${cluster.provided.dependencies.scope}</scope>
-        </dependency>
-
-        <!-- com.google.cloud.spark.bigquery.SupportedCustomDataType imports org.apache.spark.ml.linalg.SQLDataTypes -->
-        <dependency>
-            <groupId>org.apache.spark</groupId>
-            <artifactId>spark-mllib_2.12</artifactId>
-            <version>${spark.version}</version>
-            <scope>${cluster.provided.dependencies.scope}</scope>
-        </dependency>
-
-    </dependencies>
-
-    <dependencyManagement>
-        <dependencies>
-            <!-- conflict between spark-3.1-bigquery and gcs-connector -->
-            <dependency>
-                <groupId>io.grpc</groupId>
-                <artifactId>grpc-core</artifactId>
-                <version>1.53.0</version>
-            </dependency>
-            <dependency>
-                <groupId>io.grpc</groupId>
-                <artifactId>grpc-api</artifactId>
-                <version>1.53.0</version>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
-
-    <profiles>
-        <profile>
-            <id>dist</id>
-            <properties>
-                <cluster.provided.dependencies.scope>provided</cluster.provided.dependencies.scope>
-                <spark.submit.packages.dependencies.scope>provided</spark.submit.packages.dependencies.scope>
-            </properties>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-shade-plugin</artifactId>
-                        <version>3.4.1</version>
-                        <executions>
-                            <execution>
-                                <phase>package</phase>
-                                <goals>
-                                    <goal>shade</goal>
-                                </goals>
-                                <configuration>
-                                    <createDependencyReducedPom>false</createDependencyReducedPom>
-                                    <artifactSet>
-                                        <excludes>
-                                            <exclude>org.scala-lang:*</exclude>
-                                        </excludes>
-                                    </artifactSet>
-                                </configuration>
-                            </execution>
-                        </executions>
-                        <configuration>
-                            <filters>
-                                <filter>
-                                    <artifact>*:*</artifact>
-                                    <excludes>
-                                        <exclude>META-INF/*.SF</exclude>
-                                        <exclude>META-INF/*.DSA</exclude>
-                                        <exclude>META-INF/*.RSA</exclude>
-                                    </excludes>
-                                </filter>
-                            </filters>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
 </project>

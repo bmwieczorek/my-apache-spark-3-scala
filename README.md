@@ -27,7 +27,7 @@ gcloud dataproc jobs submit spark --cluster=bartek-beam-on-spark --region=us-cen
 --labels=job_name=bartek-myreadavrogcsandwritebqbroadcastapp \
 --properties ^#^spark.jars.packages=org.apache.spark:spark-avro_2.12:3.1.3,com.google.cloud.spark:spark-bigquery-with-dependencies_2.12:0.29.0#spark.dynamicAllocation.enabled=true#spark.shuffle.service.enabled=true \
 -- \
---projectId=${GCP_PROJECT}
+ --projectId=${GCP_PROJECT}
 
 # customize multiple properties for same and different components 
 # https://stackoverflow.com/questions/72369619/gcp-dataproc-adding-multiple-packageskafka-mongodb-while-submitting-jobs-no

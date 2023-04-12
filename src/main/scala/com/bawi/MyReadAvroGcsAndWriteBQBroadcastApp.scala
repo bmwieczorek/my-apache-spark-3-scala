@@ -30,7 +30,7 @@ object MyReadAvroGcsAndWriteBQBroadcastApp {
     dataDF = dataDF.withColumn("uname", getCountryUDF(col("name")))
     dataDF = dataDF.map((p: Row) => {
       val name = p.getAs[String]("name")
-      val body =  p.getAs[Array[Byte]]("body")
+      val body = p.getAs[Array[Byte]]("body")
       val uname = p.getAs[String]("uname")
       LOGGER.info("processing {}", (name, new String(body), uname))
       (name, body, uname)
