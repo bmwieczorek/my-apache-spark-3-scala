@@ -45,4 +45,19 @@ object MyReadAvroGcsAndWriteBQBroadcastApp {
       .save("bartek_person.bartek_person_spark")
     spark.stop()
   }
+
+// Spark execution 2 stages on dataproc
+//  Stage 1:
+//    Scan avro
+//      FileScanRDD[3] save at BigQueryWriteHelper.java: 105
+//      MapPartitionsRDD[4] save at BigQueryWriteHelper.java: 105
+//  WholeStageCodegen (1)
+//      MapPartitionsRDD[5] save at BigQueryWriteHelper.java: 105
+//
+//  Stage 0:
+//      PreScala213BigQueryRDD[0] RDD at PreScala213BigQueryRDD.java: 71
+//  WholeStageCodegen(1)
+//      MapPartitionsRDD[1] collect at MyReadAvroGcsAndWriteBQBroadcastApp.scala: 24
+//  mapPartitionsInternal
+//      MapPartitionsRDD[2] collect at MyReadAvroGcsAndWriteBQBroadcastApp.scala: 24
 }
