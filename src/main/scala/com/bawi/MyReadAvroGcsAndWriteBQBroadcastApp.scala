@@ -14,6 +14,8 @@ object MyReadAvroGcsAndWriteBQBroadcastApp {
     val spark = SparkUtils.createSpark(getClass, args)
     import spark.implicits._
 
+    val processedRecordsCounter = spark.sparkContext.longAccumulator("metricsCounter")
+
     var dataDF: DataFrame = spark.read.format("avro").load("gs://" + spark.conf.get("projectId") + "-bartek-dataproc/myRecord.snappy.avro")
 
     val refDF = spark.read.format("bigquery")
@@ -31,6 +33,7 @@ object MyReadAvroGcsAndWriteBQBroadcastApp {
 
     dataDF = dataDF.withColumn("uname", getCountryUDF(col("name")))
     dataDF = dataDF.map((p: Row) => {
+      processedRecordsCounter.add(1)
       val name = p.getAs[String]("name")
       val body = p.getAs[Array[Byte]]("body")
       val uname = p.getAs[String]("uname")
@@ -43,6 +46,9 @@ object MyReadAvroGcsAndWriteBQBroadcastApp {
       .option("temporaryGcsBucket", spark.conf.get("projectId") + "-bartek-spark")
       .mode(SaveMode.Append)
       .save("bartek_person.bartek_person_spark")
+
+    LOGGER.info(s"processedRecordsCounter=$processedRecordsCounter.value")
+
     spark.stop()
   }
 
