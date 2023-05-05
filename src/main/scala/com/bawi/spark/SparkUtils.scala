@@ -8,25 +8,35 @@ object SparkUtils {
   private val LOGGER = LoggerFactory.getLogger(SparkUtils.getClass)
 
   def createSpark(appClazz: Class[_], args: Array[String], additionalArgs: String*): SparkSession = {
-    val sparkConf = new SparkConf().setAppName(getClassSimpleName(appClazz))
-//      .set("spark.plugins", getClassName(CustomMetricSparkPlugin.getClass))
+    val sparkConf: SparkConf = createSparkConf(appClazz, args, additionalArgs)
+    SparkSession.builder().config(sparkConf).getOrCreate()
+  }
+
+  def createSparkWithMetrics(appClazz: Class[_], pluginClazz: Class[_], args: Array[String], additionalArgs: String*): SparkSession = {
+    val sparkConf: SparkConf = createSparkConf(appClazz, args, additionalArgs)
+    sparkConf
+      .set("spark.plugins", getClassName(pluginClazz))
       .set("spark.metrics.namespace", getClassSimpleName(appClazz))
 
       .set("spark.metrics.conf.*.sink.slf4j.class", "org.apache.spark.metrics.sink.Slf4jSink")
       .set("spark.metrics.conf.*.sink.slf4j.period", "10")
       .set("spark.metrics.conf.*.sink.slf4j.unit", "seconds")
 
-//      .set("spark.metrics.conf.*.sink.csv.class", "org.apache.spark.metrics.sink.CsvSink")
-//      .set("spark.metrics.conf.*.sink.csv.period", "5")
-//      .set("spark.metrics.conf.*.sink.csv.unit", "seconds")
-//      .set("spark.metrics.conf.*.sink.csv.directory", "/Users/sg0212148/dev/my-apache-spark-3-scala/target/csv")
-//      .set("spark.metrics.conf.worker.sink.csv.period", "5")
-//      .set("spark.metrics.conf.worker.sink.csv.unit", "seconds")
+      //      .set("spark.metrics.conf.*.sink.csv.class", "org.apache.spark.metrics.sink.CsvSink")
+      //      .set("spark.metrics.conf.*.sink.csv.period", "5")
+      //      .set("spark.metrics.conf.*.sink.csv.unit", "seconds")
+      //      .set("spark.metrics.conf.*.sink.csv.directory", "/Users/sg0212148/dev/my-apache-spark-3-scala/target/csv")
+      //      .set("spark.metrics.conf.worker.sink.csv.period", "5")
+      //      .set("spark.metrics.conf.worker.sink.csv.unit", "seconds")
 
       .set("spark.metrics.conf.driver.source.jvm.class", "org.apache.spark.metrics.source.JvmSource")
 
-//      .set("spark.metrics.conf", "metrics-slf4j.properties")
+    //      .set("spark.metrics.conf", "metrics-slf4j.properties")
+    SparkSession.builder().config(sparkConf).getOrCreate()
+  }
 
+  private def createSparkConf(appClazz: Class[_], args: Array[String], additionalArgs: Seq[String]) = {
+    val sparkConf = new SparkConf().setAppName(getClassSimpleName(appClazz))
     val allArgs: Array[String] = Array.concat(additionalArgs.toArray, args)
     allArgs
       .filter(s => s.startsWith("--"))
@@ -48,7 +58,7 @@ object SparkUtils {
     //        sparkConf.set("fs.gs.project.id", sparkConf.get("projectId"))
     //    }
     LOGGER.info("Setting Spark conf: {}", sparkConf.getAll.map(e => e._1 + "=" + e._2))
-    SparkSession.builder().config(sparkConf).getOrCreate()
+    sparkConf
   }
 
   private def isLocal: Boolean = {
@@ -57,7 +67,8 @@ object SparkUtils {
   }
 
   def getClassName(clazz: Class[_]): String = {
-    clazz.getName.split('$')(0)
+    val name = clazz.getName
+    name.substring(0, name.lastIndexOf("$"))
   }
 
   private def getClassSimpleName(clazz: Class[_]): String = {

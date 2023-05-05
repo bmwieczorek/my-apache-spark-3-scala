@@ -22,6 +22,14 @@ gcloud dataproc jobs submit spark --cluster=bartek-spark-on-dataproc --region=us
  --projectId=${GCP_PROJECT}
 
 gcloud dataproc jobs submit spark --cluster=bartek-spark-on-dataproc --region=us-central1 \
+--class=com.bawi.spark.MyMultiOutputMetricsApp \
+--jars=gs://${GCP_PROJECT}-bartek-dataproc/my-apache-spark-3-scala-0.1-SNAPSHOT.jar \
+--properties spark.jars.packages=org.apache.spark:spark-avro_2.12:3.1.3 \
+--labels=job_name=bartek-mymultioutputmetricsapp \
+-- \
+--projectId=${GCP_PROJECT}
+
+gcloud dataproc jobs submit spark --cluster=bartek-spark-on-dataproc --region=us-central1 \
 --class=com.bawi.spark.MyReadAvroGcsAndWriteBQBroadcastApp \
 --jars=gs://${GCP_PROJECT}-bartek-dataproc/my-apache-spark-3-scala-0.1-SNAPSHOT.jar \
 --labels=job_name=bartek-myreadavrogcsandwritebqbroadcastapp \
@@ -45,10 +53,11 @@ CLUSTER_NAME=bartek-spark-on-dataproc && \
 START_TIME="$(date -u -v-1M '+%Y-%m-%dT%H:%M:%SZ')" && \
 END_TIME="$(date -u -v-60M '+%Y-%m-%dT%H:%M:%SZ')" && \
 LATEST_JOB_ID=$(gcloud dataproc jobs list --region=us-central1 --filter="placement.clusterName=${CLUSTER_NAME} AND labels.job_name=${LABELS_JOB_NAME}" --format=json --sort-by=~status.stateStartTime | jq -r ".[0].reference.jobId") && \
-echo "Latest job id: $LATEST_JOB_ID"
+echo "Latest job id: $LATEST_JOB_ID" && 
+gcloud logging read --project ${GCP_PROJECT} "timestamp<=\"${START_TIME}\" AND timestamp>=\"${END_TIME}\" AND resource.type=cloud_dataproc_job AND labels.\"dataproc.googleapis.com/cluster_name\"=${CLUSTER_NAME} AND resource.labels.job_id=${LATEST_JOB_ID} AND jsonPayload.class=\"metrics\" AND jsonPayload.message=~\".*plugin.*\"" --format "table(timestamp,jsonPayload.message)" --order=asc
+
 gcloud logging read --project ${GCP_PROJECT} "timestamp<=\"${START_TIME}\" AND timestamp>=\"${END_TIME}\" AND resource.type=cloud_dataproc_job AND labels.\"dataproc.googleapis.com/cluster_name\"=${CLUSTER_NAME} AND resource.labels.job_id=${LATEST_JOB_ID}" --format "table(timestamp,jsonPayload.message)" --order=asc
 gcloud logging read --project ${GCP_PROJECT} "timestamp<=\"${START_TIME}\" AND timestamp>=\"${END_TIME}\" AND resource.type=cloud_dataproc_job AND labels.\"dataproc.googleapis.com/cluster_name\"=${CLUSTER_NAME} AND resource.labels.job_id=${LATEST_JOB_ID} AND (jsonPayload.class=~\"com.*\" OR jsonPayload.class=~\"org.*\")" --format "table(timestamp,jsonPayload.message)" --order=asc
-gcloud logging read --project ${GCP_PROJECT} "timestamp<=\"${START_TIME}\" AND timestamp>=\"${END_TIME}\" AND resource.type=cloud_dataproc_job AND labels.\"dataproc.googleapis.com/cluster_name\"=${CLUSTER_NAME} AND resource.labels.job_id=${LATEST_JOB_ID} AND jsonPayload.class=\"metrics\" AND jsonPayload.message=~\".*customMetricCounter.*\"" --format "table(timestamp,jsonPayload.message)" --order=asc
 
 
 TIMESTAMP             MESSAGE
