@@ -22,14 +22,6 @@ gcloud dataproc jobs submit spark --cluster=bartek-spark-on-dataproc --region=us
  --projectId=${GCP_PROJECT}
 
 gcloud dataproc jobs submit spark --cluster=bartek-spark-on-dataproc --region=us-central1 \
---class=com.bawi.spark.MyMultiOutputMetricsApp \
---jars=gs://${GCP_PROJECT}-bartek-dataproc/my-apache-spark-3-scala-0.1-SNAPSHOT.jar \
---properties spark.jars.packages=org.apache.spark:spark-avro_2.12:3.1.3 \
---labels=job_name=bartek-mymultioutputmetricsapp \
--- \
---projectId=${GCP_PROJECT}
-
-gcloud dataproc jobs submit spark --cluster=bartek-spark-on-dataproc --region=us-central1 \
 --class=com.bawi.spark.MyReadAvroGcsAndWriteBQBroadcastApp \
 --jars=gs://${GCP_PROJECT}-bartek-dataproc/my-apache-spark-3-scala-0.1-SNAPSHOT.jar \
 --labels=job_name=bartek-myreadavrogcsandwritebqbroadcastapp \
