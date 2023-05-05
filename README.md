@@ -48,6 +48,8 @@ resource.type="cloud_dataproc_job"
 (jsonPayload.class=~"com.*" OR jsonPayload.class=~"org.*")
 
 
+LABELS_JOB_NAME=bartek-mymultioutputmetricsapp && \
+
 LABELS_JOB_NAME=bartek-myreadavrogcsandwritebqbroadcastapp && \
 CLUSTER_NAME=bartek-spark-on-dataproc && \
 START_TIME="$(date -u -v-1M '+%Y-%m-%dT%H:%M:%SZ')" && \
