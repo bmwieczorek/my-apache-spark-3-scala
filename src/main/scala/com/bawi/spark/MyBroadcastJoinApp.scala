@@ -1,4 +1,4 @@
-package com.bawi
+package com.bawi.spark
 
 import org.apache.spark.sql.functions.broadcast
 

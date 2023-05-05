@@ -1,5 +1,7 @@
-package com.bawi
+package com.bawi.spark
 
+import com.bawi.spark.SparkUtils.getClassName
+import com.bawi.spark.metrics.CustomMetricSparkPlugin
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.{DataFrame, Row, SaveMode}
 import org.slf4j.LoggerFactory
@@ -11,12 +13,15 @@ object MyReadAvroGcsAndWriteBQBroadcastApp {
   def main(args: Array[String]): Unit = {
     LOGGER.info("GOOGLE_APPLICATION_CREDENTIALS={}", System.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
 
-    val spark = SparkUtils.createSpark(getClass, args)
+    val spark = SparkUtils.createSpark(getClass, args, s"--spark.plugins=${getClassName(CustomMetricSparkPlugin.getClass)}")
+
     import spark.implicits._
 
     val processedRecordsCounter = spark.sparkContext.longAccumulator("metricsCounter")
 
-    var dataDF: DataFrame = spark.read.format("avro").load("gs://" + spark.conf.get("projectId") + "-bartek-dataproc/myRecord.snappy.avro")
+    var dataDF: DataFrame = spark.read.format("avro")
+//      .load("gs://" + spark.conf.get("projectId") + "-bartek-dataproc/myRecord-1m.snappy.avro")
+      .load("gs://" + spark.conf.get("projectId") + "-bartek-dataproc/myRecord.snappy.avro")
 
     val refDF = spark.read.format("bigquery")
       .option("viewsEnabled", "true")
@@ -34,10 +39,12 @@ object MyReadAvroGcsAndWriteBQBroadcastApp {
     dataDF = dataDF.withColumn("uname", getCountryUDF(col("name")))
     dataDF = dataDF.map((p: Row) => {
       processedRecordsCounter.add(1)
+      CustomMetricSparkPlugin.counter.inc()
       val name = p.getAs[String]("name")
       val body = p.getAs[Array[Byte]]("body")
       val uname = p.getAs[String]("uname")
-      LOGGER.info("processing {}", (name, new String(body), uname))
+//      LOGGER.info("processing {}", (name, new String(body), uname))
+      Thread.sleep(2)
       (name, body, uname)
     }).toDF(dataDF.columns: _*)
 

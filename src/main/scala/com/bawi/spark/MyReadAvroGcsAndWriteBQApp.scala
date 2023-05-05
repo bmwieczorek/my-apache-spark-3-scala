@@ -1,4 +1,4 @@
-package com.bawi
+package com.bawi.spark
 
 import org.apache.spark.sql.SaveMode
 import org.slf4j.LoggerFactory
