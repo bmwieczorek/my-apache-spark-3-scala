@@ -1,13 +1,14 @@
 package com.bawi.spark
 
-import com.bawi.spark.SparkUtils.getClassName
 import com.codahale.metrics.Counter
+import org.apache.spark.SparkContext
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.{DataFrame, Row, SaveMode}
 import org.slf4j.LoggerFactory
 
 import java.util
+import java.util.Collections
 
 object MyReadAvroGcsAndWriteBQBroadcastApp {
 
@@ -16,15 +17,20 @@ object MyReadAvroGcsAndWriteBQBroadcastApp {
   def main(args: Array[String]): Unit = {
     LOGGER.info("GOOGLE_APPLICATION_CREDENTIALS={}", System.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
 
-    val spark = SparkUtils.createSparkWithMetrics(getClass, CustomMetricSparkPlugin.getClass, args, s"--spark.plugins=${getClassName(CustomMetricSparkPlugin.getClass)}")
+    val spark = SparkUtils.createSparkWithCustomMetrics(getClass, CustomMetricSparkPlugin.getClass, args
+//      ,s"--spark.plugins=${classOf[CustomMetricSparkPlugin].getName}"
+      // optional custom metrics sink requires maven -Pcustom-metrics-sink when running locally
+//          , "--spark.metrics.conf.*.sink.mygcpmetric.class=org.apache.spark.metrics.sink.MyGcpMetricSink"
+//          , "--spark.metrics.conf.*.sink.myconsole.class=org.apache.spark.metrics.sink.MyConsoleSink"
+    )
 
     import spark.implicits._
 
-    val processedRecordsCounter = spark.sparkContext.longAccumulator("metricsCounter")
+    val processedRecordsAccumulator = spark.sparkContext.longAccumulator("metricsCounter")
 
     var dataDF: DataFrame = spark.read.format("avro")
-//      .load("gs://" + spark.conf.get("projectId") + "-bartek-dataproc/myRecord-1m.snappy.avro")
-      .load("gs://" + spark.conf.get("projectId") + "-bartek-dataproc/myRecord.snappy.avro")
+      .load("gs://" + spark.conf.get("projectId") + "-bartek-dataproc/myRecord*1k.snappy.avro")
+//      .load("gs://" + spark.conf.get("projectId") + "-bartek-dataproc/myRecord.snappy.avro")
 
     val refDF = spark.read.format("bigquery")
       .option("viewsEnabled", "true")
@@ -41,13 +47,13 @@ object MyReadAvroGcsAndWriteBQBroadcastApp {
 
     dataDF = dataDF.withColumn("uname", getCountryUDF(col("name")))
     dataDF = dataDF.map((p: Row) => {
-      processedRecordsCounter.add(1)
-      CustomMetricSparkPlugin.counter.inc()
+      processedRecordsAccumulator.add(1)
+      CustomMetricSparkPlugin.executor_counter.inc()
       val name = p.getAs[String]("name")
       val body = p.getAs[Array[Byte]]("body")
       val uname = p.getAs[String]("uname")
-      LOGGER.info("processing {}", (name, new String(body), uname))
-      Thread.sleep(2)
+//      LOGGER.info("processing {}", (name, new String(body), uname))
+      Thread.sleep(100)
       (name, body, uname)
     }).toDF(dataDF.columns: _*)
 
@@ -57,21 +63,30 @@ object MyReadAvroGcsAndWriteBQBroadcastApp {
       .mode(SaveMode.Append)
       .save("bartek_person.bartek_person_spark")
 
-    LOGGER.info(s"processedRecordsCounter=${processedRecordsCounter.value}")
+    CustomMetricSparkPlugin.driver_counter.inc(processedRecordsAccumulator.value)
+
+    LOGGER.info(s"processedRecordsAccumulator=${processedRecordsAccumulator.value}")
 
     spark.stop()
   }
 
   object CustomMetricSparkPlugin {
-    val counter = new Counter
+    val executor_counter = new Counter
+    val driver_counter = new Counter
   }
   // needs to be registered in spark conf .set("spark.plugins", "com.bawi.spark.metrics.CustomMetricSparkPlugin")
   class CustomMetricSparkPlugin extends SparkPlugin {
-    override def driverPlugin(): DriverPlugin = null
+    override def driverPlugin(): DriverPlugin = new DriverPlugin {
+      override def init(sparkContext: SparkContext, pluginContext: PluginContext): util.Map[String, String] = {
+        val metricRegistry = pluginContext.metricRegistry()
+        metricRegistry.register("driver_records_processed", CustomMetricSparkPlugin.driver_counter)
+        Collections.emptyMap[String, String]
+      }
+    }
     override def executorPlugin(): ExecutorPlugin = new ExecutorPlugin {
       override def init(ctx: PluginContext, extraConf: util.Map[String, String]): Unit = {
         val metricRegistry = ctx.metricRegistry()
-        metricRegistry.register("customMetricCounter", CustomMetricSparkPlugin.counter)
+        metricRegistry.register("executor_records_processed", CustomMetricSparkPlugin.executor_counter)
       }
     }
   }
