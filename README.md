@@ -9,6 +9,9 @@ mvn dependency:tree -Dverbose > dep.txt
 CLUSTER=bartek-spark-313s-on-dataproc
 # gcloud compute ssh --zone "${GCP_ZONE}" "${CLUSTER}-m" --tunnel-through-iap --project "${GCP_PROJECT}" -- "find / -iname \*protobuf-java-util\*.jar"
 
+# applicationId=application_1683...75114_0008
+# gcloud compute ssh --zone "${GCP_ZONE}" "${CLUSTER}-m" --tunnel-through-iap --project "${GCP_PROJECT}" -- "yarn logs -applicationId $applicationId" > $applicationId.log.txt
+
 gcloud dataproc jobs submit spark --cluster=${CLUSTER} --region=us-central1 \
 --class=com.bawi.spark.MySimpleCountApp \
 --jars=gs://${GCP_PROJECT}-bartek-dataproc/my-apache-spark-3-scala-0.1-SNAPSHOT.jar \
@@ -84,6 +87,3 @@ TIMESTAMP             MESSAGE
 # customize multiple properties for same and different components
 # https://stackoverflow.com/questions/72369619/gcp-dataproc-adding-multiple-packageskafka-mongodb-while-submitting-jobs-no
 # https://medium.com/@randy-huang/gcp-dataproc-using-customize-properties-18f83a9ead06
-
-
-
