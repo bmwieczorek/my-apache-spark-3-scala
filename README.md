@@ -1,19 +1,20 @@
+# See setup-cluster.sh or setup-cluster-with-custom-sink.sh
+# then run ./run.sh
+
 export JAVA_HOME=$(/usr/libexec/java_home -v1.8)
 export PATH=$JAVA_HOME/bin:$PATH
 mvn -version
-mvn clean package -Pdist
 mvn dependency:tree -Dverbose > dep.txt
 
+CLUSTER=bartek-spark-313s-on-dataproc
+# gcloud compute ssh --zone "${GCP_ZONE}" "${CLUSTER}-m" --tunnel-through-iap --project "${GCP_PROJECT}" -- "find / -iname \*protobuf-java-util\*.jar"
 
-gsutil rm gs://${GCP_PROJECT}-bartek-dataproc/my-apache-spark-3-scala-0.1-SNAPSHOT.jar
-mvn clean package -Pdist && gsutil cp target/my-apache-spark-3-scala-0.1-SNAPSHOT.jar gs://${GCP_PROJECT}-bartek-dataproc/
-
-gcloud dataproc jobs submit spark --cluster=bartek-spark-on-dataproc --region=us-central1 \
+gcloud dataproc jobs submit spark --cluster=${CLUSTER} --region=us-central1 \
 --class=com.bawi.spark.MySimpleCountApp \
 --jars=gs://${GCP_PROJECT}-bartek-dataproc/my-apache-spark-3-scala-0.1-SNAPSHOT.jar \
 --labels=job_name=bartek-mysimplecountapp
 
-gcloud dataproc jobs submit spark --cluster=bartek-spark-on-dataproc --region=us-central1 \
+gcloud dataproc jobs submit spark --cluster=${CLUSTER} --region=us-central1 \
 --class=com.bawi.spark.MyReadAvroGcsApp \
 --jars=gs://${GCP_PROJECT}-bartek-dataproc/my-apache-spark-3-scala-0.1-SNAPSHOT.jar \
 --properties spark.jars.packages=org.apache.spark:spark-avro_2.12:3.1.3 \
@@ -21,54 +22,30 @@ gcloud dataproc jobs submit spark --cluster=bartek-spark-on-dataproc --region=us
 -- \
  --projectId=${GCP_PROJECT}
 
-gcloud dataproc jobs submit spark --cluster=bartek-spark-on-dataproc --region=us-central1 \
---class=com.bawi.spark.MyMultiOutputMetricsApp \
---jars=gs://${GCP_PROJECT}-bartek-dataproc/my-apache-spark-3-scala-0.1-SNAPSHOT.jar \
---properties spark.jars.packages=org.apache.spark:spark-avro_2.12:3.1.3 \
---labels=job_name=bartek-mymultioutputmetricsapp \
--- \
---projectId=${GCP_PROJECT}
-
-gcloud dataproc jobs submit spark --cluster=bartek-spark-on-dataproc --region=us-central1 \
---class=com.bawi.spark.MyReadAvroGcsAndWriteBQBroadcastApp \
---jars=gs://${GCP_PROJECT}-bartek-dataproc/my-apache-spark-3-scala-0.1-SNAPSHOT.jar \
---labels=job_name=bartek-myreadavrogcsandwritebqbroadcastapp \
---properties ^#^spark.jars.packages=org.apache.spark:spark-avro_2.12:3.1.3,com.google.cloud.spark:spark-bigquery-with-dependencies_2.12:0.29.0#spark.dynamicAllocation.enabled=true#spark.shuffle.service.enabled=true \
--- \
- --projectId=${GCP_PROJECT}
-
-# customize multiple properties for same and different components 
-# https://stackoverflow.com/questions/72369619/gcp-dataproc-adding-multiple-packageskafka-mongodb-while-submitting-jobs-no
-# https://medium.com/@randy-huang/gcp-dataproc-using-customize-properties-18f83a9ead06
 
 Logging:
 # query spark container logs in logs explorer
-resource.labels.job_id="4220aac1746d4d5195e69ec649459d06"
+resource.labels.job_id="4220aac1746d4d5195e69e..."
 resource.type="cloud_dataproc_job"
 (jsonPayload.class=~"com.*" OR jsonPayload.class=~"org.*")
 
+LABELS_JOB_NAME=bartek-mysimplecountapp && \
 
-LABELS_JOB_NAME=bartek-mymultioutputmetricsapp && \
-
-LABELS_JOB_NAME=bartek-myreadavrogcsandwritebqbroadcastapp && \
-CLUSTER_NAME=bartek-spark-on-dataproc && \
-START_TIME="$(date -u -v-1M '+%Y-%m-%dT%H:%M:%SZ')" && \
+LABELS_JOB_NAME=bartek-myreadavrogcsapp && \
+START_TIME="$(date -u -v-1S '+%Y-%m-%dT%H:%M:%SZ')" && \
 END_TIME="$(date -u -v-60M '+%Y-%m-%dT%H:%M:%SZ')" && \
-LATEST_JOB_ID=$(gcloud dataproc jobs list --region=us-central1 --filter="placement.clusterName=${CLUSTER_NAME} AND labels.job_name=${LABELS_JOB_NAME}" --format=json --sort-by=~status.stateStartTime | jq -r ".[0].reference.jobId") && \
+LATEST_JOB_ID=$(gcloud dataproc jobs list --region=us-central1 --filter="placement.clusterName=${CLUSTER} AND labels.job_name=${LABELS_JOB_NAME}" --format=json --sort-by=~status.stateStartTime | jq -r ".[0].reference.jobId") && \
 echo "Latest job id: $LATEST_JOB_ID" && 
-gcloud logging read --project ${GCP_PROJECT} "timestamp<=\"${START_TIME}\" AND timestamp>=\"${END_TIME}\" AND resource.type=cloud_dataproc_job AND labels.\"dataproc.googleapis.com/cluster_name\"=${CLUSTER_NAME} AND resource.labels.job_id=${LATEST_JOB_ID} AND jsonPayload.class=\"metrics\" AND jsonPayload.message=~\".*plugin.*\"" --format "table(timestamp,jsonPayload.message)" --order=asc
-
-gcloud logging read --project ${GCP_PROJECT} "timestamp<=\"${START_TIME}\" AND timestamp>=\"${END_TIME}\" AND resource.type=cloud_dataproc_job AND labels.\"dataproc.googleapis.com/cluster_name\"=${CLUSTER_NAME} AND resource.labels.job_id=${LATEST_JOB_ID}" --format "table(timestamp,jsonPayload.message)" --order=asc
-gcloud logging read --project ${GCP_PROJECT} "timestamp<=\"${START_TIME}\" AND timestamp>=\"${END_TIME}\" AND resource.type=cloud_dataproc_job AND labels.\"dataproc.googleapis.com/cluster_name\"=${CLUSTER_NAME} AND resource.labels.job_id=${LATEST_JOB_ID} AND (jsonPayload.class=~\"com.*\" OR jsonPayload.class=~\"org.*\")" --format "table(timestamp,jsonPayload.message)" --order=asc
+gcloud logging read --project ${GCP_PROJECT} "timestamp<=\"${START_TIME}\" AND timestamp>=\"${END_TIME}\" AND resource.type=cloud_dataproc_job AND labels.\"dataproc.googleapis.com/CLUSTER\"=${CLUSTER} AND resource.labels.job_id=${LATEST_JOB_ID} AND (jsonPayload.class=~\"com.*\" OR jsonPayload.class=~\"org.*\")" --format "table(timestamp,jsonPayload.message)" --order=asc
 
 
 TIMESTAMP             MESSAGE
 2023-04-12T12:59:33Z  GOOGLE_APPLICATION_CREDENTIALS=null
-2023-04-12T12:59:33Z  Setting Spark conf: [spark.eventLog.enabled=true, spark.dynamicAllocation.minExecutors=1, spark.sql.autoBroadcastJoinThreshold=46m, spark.jars=file:/tmp/4220aac1746d4d5195e69ec649459d06/dataproc-empty-jar-1681304370433.jar, spark.master.rest.enabled=true, spark.dataproc.sql.parquet.enableFooterCache=true, spark.driver.maxResultSize=2048m, spark.dataproc.sql.joinConditionReorder.enabled=true, spark.yarn.am.memory=640m, spark.yarn.historyServer.address=bartek-spark-on-dataproc-m:18080, spark.dataproc.sql.local.rank.pushdown.enabled=true, spark.executor.instances=2, spark.repl.local.jars=file:///tmp/4220aac1746d4d5195e69ec649459d06/my-apache-spark-3-scala-0.1-SNAPSHOT.jar,file:///root/.ivy2/jars/org.apache.spark_spark-avro_2.12-3.1.3.jar,file:///root/.ivy2/jars/com.google.cloud.spark_spark-bigquery-with-dependencies_2.12-0.29.0.jar,file:///root/.ivy2/jars/org.spark-project.spark_unused-1.0.0.jar, spark.yarn.unmanagedAM.enabled=true, spark.submit.deployMode=client, spark.dataproc.metrics.listener.metrics.collector.hostname=bartek-spark-on-dataproc-m, spark.extraListeners=com.google.cloud.spark.performance.DataprocMetricsListener, spark.yarn.dist.jars=file:///tmp/4220aac1746d4d5195e69ec649459d06/my-apache-spark-3-scala-0.1-SNAPSHOT.jar,file:///root/.ivy2/jars/org.apache.spark_spark-avro_2.12-3.1.3.jar,file:///root/.ivy2/jars/com.google.cloud.spark_spark-bigquery-with-dependencies_2.12-0.29.0.jar,file:///root/.ivy2/jars/org.spark-project.spark_unused-1.0.0.jar, spark.app.name=com.bawi.spark.MyReadAvroGcsAndWriteBQBroadcastApp$, spark.driver.memory=4096m, spark.history.fs.logDirectory=gs://dataproc-temp-us-central1-318621067355-ph9xjy72/f02f6f56-1570-4245-8af2-05e726693604/spark-job-history, spark.sql.cbo.joinReorder.enabled=true, spark.shuffle.service.enabled=true, spark.metrics.namespace=app_name:${spark.app.name}.app_id:${spark.app.id}, spark.scheduler.mode=FAIR, spark.dataproc.sql.optimizer.leftsemijoin.conversion.enabled=true, spark.sql.adaptive.enabled=true, spark.yarn.jars=local:/usr/lib/spark/jars/*, spark.eventLog.dir=gs://dataproc-temp-us-central1-318621067355-ph9xjy72/f02f6f56-1570-4245-8af2-05e726693604/spark-job-history, spark.scheduler.minRegisteredResourcesRatio=0.0, spark.yarn.tags=dataproc_hash_161b47e9-947c-355a-9d24-b7583d80e90b,dataproc_job_4220aac1746d4d5195e69ec649459d06,dataproc_master_index_0,dataproc_uuid_e7a7d831-a388-3eb6-a5df-6a3d90762aaf, spark.hadoop.hive.execution.engine=mr, spark.executor.cores=2, spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version=2, spark.dynamicAllocation.maxExecutors=10000, spark.jars.packages=org.apache.spark:spark-avro_2.12:3.1.3,com.google.cloud.spark:spark-bigquery-with-dependencies_2.12:0.29.0, spark.master=yarn, spark.ui.port=0, spark.sql.catalogImplementation=hive, spark.rpc.message.maxSize=512, spark.executor.memory=6157m, projectId=my-project, spark.executorEnv.OPENBLAS_NUM_THREADS=1, spark.submit.pyFiles=, spark.dynamicAllocation.enabled=true, spark.sql.cbo.enabled=true]
+2023-04-12T12:59:33Z  Setting Spark conf: [spark.eventLog.enabled=true, spark.dynamicAllocation.minExecutors=1, spark.sql.autoBroadcastJoinThreshold=46m, spark.jars=file:/tmp/4220aac1746d4d5195e69ec649459d06/dataproc-empty-jar-1681304370433.jar, spark.master.rest.enabled=true, spark.dataproc.sql.parquet.enableFooterCache=true, spark.driver.maxResultSize=2048m, spark.dataproc.sql.joinConditionReorder.enabled=true, spark.yarn.am.memory=640m, spark.yarn.historyServer.address=${CLUSTER}-m:18080, spark.dataproc.sql.local.rank.pushdown.enabled=true, spark.executor.instances=2, spark.repl.local.jars=file:///tmp/4220aac1746d4d5195e69ec649459d06/my-apache-spark-3-scala-0.1-SNAPSHOT.jar,file:///root/.ivy2/jars/org.apache.spark_spark-avro_2.12-3.1.3.jar,file:///root/.ivy2/jars/com.google.cloud.spark_spark-bigquery-with-dependencies_2.12-0.29.0.jar,file:///root/.ivy2/jars/org.spark-project.spark_unused-1.0.0.jar, spark.yarn.unmanagedAM.enabled=true, spark.submit.deployMode=client, spark.dataproc.metrics.listener.metrics.collector.hostname=${CLUSTER}-m, spark.extraListeners=com.google.cloud.spark.performance.DataprocMetricsListener, spark.yarn.dist.jars=file:///tmp/4220aac1746d4d5195e69ec649459d06/my-apache-spark-3-scala-0.1-SNAPSHOT.jar,file:///root/.ivy2/jars/org.apache.spark_spark-avro_2.12-3.1.3.jar,file:///root/.ivy2/jars/com.google.cloud.spark_spark-bigquery-with-dependencies_2.12-0.29.0.jar,file:///root/.ivy2/jars/org.spark-project.spark_unused-1.0.0.jar, spark.app.name=com.bawi.spark.MyReadAvroGcsAndWriteBQBroadcastApp$, spark.driver.memory=4096m, spark.history.fs.logDirectory=gs://dataproc-temp-us-central1-318621067355-ph9xjy72/f02f6f56-1570-4245-8af2-05e726693604/spark-job-history, spark.sql.cbo.joinReorder.enabled=true, spark.shuffle.service.enabled=true, spark.metrics.namespace=app_name:${spark.app.name}.app_id:${spark.app.id}, spark.scheduler.mode=FAIR, spark.dataproc.sql.optimizer.leftsemijoin.conversion.enabled=true, spark.sql.adaptive.enabled=true, spark.yarn.jars=local:/usr/lib/spark/jars/*, spark.eventLog.dir=gs://dataproc-temp-us-central1-318621067355-ph9xjy72/f02f6f56-1570-4245-8af2-05e726693604/spark-job-history, spark.scheduler.minRegisteredResourcesRatio=0.0, spark.yarn.tags=dataproc_hash_161b47e9-947c-355a-9d24-b7583d80e90b,dataproc_job_4220aac1746d4d5195e69ec649459d06,dataproc_master_index_0,dataproc_uuid_e7a7d831-a388-3eb6-a5df-6a3d90762aaf, spark.hadoop.hive.execution.engine=mr, spark.executor.cores=2, spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version=2, spark.dynamicAllocation.maxExecutors=10000, spark.jars.packages=org.apache.spark:spark-avro_2.12:3.1.3,com.google.cloud.spark:spark-bigquery-with-dependencies_2.12:0.29.0, spark.master=yarn, spark.ui.port=0, spark.sql.catalogImplementation=hive, spark.rpc.message.maxSize=512, spark.executor.memory=6157m, projectId=my-project, spark.executorEnv.OPENBLAS_NUM_THREADS=1, spark.submit.pyFiles=, spark.dynamicAllocation.enabled=true, spark.sql.cbo.enabled=true]
 2023-04-12T12:59:34Z  Logging initialized @3384ms to org.sparkproject.jetty.util.log.Slf4jLog
 2023-04-12T12:59:34Z  jetty-9.4.40.v20210413; built: 2021-04-13T20:42:42.668Z; git: b881a572662e1943a14ae12e7e1207989f218b74; jvm 1.8.0_362-b09
-2023-04-12T12:59:34Z  Connecting to ResourceManager at bartek-spark-on-dataproc-m/10.128.124.245:8032
-2023-04-12T12:59:34Z  Connecting to Application History server at bartek-spark-on-dataproc-m/10.128.124.245:10200
+2023-04-12T12:59:34Z  Connecting to ResourceManager at ${CLUSTER}-m/10.128.124.245:8032
+2023-04-12T12:59:34Z  Connecting to Application History server at ${CLUSTER}-m/10.128.124.245:10200
 2023-04-12T12:59:36Z  Submitted application application_1680791486132_0024
 2023-04-12T12:59:46Z  |Querying table my-project.my_dataset._bqc_f254984e78ba42d59b15497e8b1a8755, parameters sent from Spark:|requiredColumns=[name,uname],|filters=[]
 2023-04-12T12:59:48Z  Read session:{"readSessionName":"projects/my-project/locations/us/sessions/CAISDHIzTElMUDJzbG51dRoCamkaAmlj","readSessionCreationStartTime":"2023-04-12T12:59:46.395Z","readSessionCreationEndTime":"2023-04-12T12:59:48.612Z","readSessionPrepDuration":939,"readSessionCreationDuration":1278,"readSessionDuration":2217}
@@ -104,22 +81,9 @@ TIMESTAMP             MESSAGE
 2023-04-12T13:00:04Z  Stopped Spark@590b0f47{HTTP/1.1, (http/1.1)}{0.0.0.0:0}
 
 
-# Create cluster bucket
-gsutil -m rm -r gs://${GCP_PROJECT}-bartek-spark-on-dataproc
-gsutil mb -l ${GCP_REGION} gs://${GCP_PROJECT}-bartek-spark-on-dataproc
+# customize multiple properties for same and different components
+# https://stackoverflow.com/questions/72369619/gcp-dataproc-adding-multiple-packageskafka-mongodb-while-submitting-jobs-no
+# https://medium.com/@randy-huang/gcp-dataproc-using-customize-properties-18f83a9ead06
 
-# Create dataproc cluster with spark logs in logs explorer
-gcloud dataproc clusters delete bartek-spark-on-dataproc --project ${GCP_PROJECT} --region us-central1 --quiet
-gcloud dataproc clusters create bartek-spark-on-dataproc \
---project ${GCP_PROJECT} --region us-central1 --zone="" --no-address \
---subnet ${GCP_SUBNETWORK} \
---master-machine-type t2d-standard-4 --master-boot-disk-size 1000 \
---num-workers 2 --worker-machine-type t2d-standard-4 --worker-boot-disk-size 2000 \
---image-version 2.0.58-debian10 \
---scopes 'https://www.googleapis.com/auth/cloud-platform' \
---service-account=${GCP_SERVICE_ACCOUNT} \
---bucket ${GCP_PROJECT}-bartek-spark-on-dataproc \
---optional-components DOCKER \
---enable-component-gateway \
---properties spark:spark.master.rest.enabled=true,dataproc:dataproc.logging.stackdriver.job.driver.enable=true,dataproc:dataproc.logging.stackdriver.enable=true,dataproc:jobs.file-backed-output.enable=true,dataproc:dataproc.logging.stackdriver.job.yarn.container.enable=true \
---metric-sources=spark,hdfs,yarn,spark-history-server,hiveserver2,hivemetastore,monitoring-agent-defaults
+
+
