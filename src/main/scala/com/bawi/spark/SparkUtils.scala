@@ -12,26 +12,29 @@ object SparkUtils {
     SparkSession.builder().config(sparkConf).getOrCreate()
   }
 
-  def createSparkWithMetrics(appClazz: Class[_], pluginClazz: Class[_], args: Array[String], additionalArgs: String*): SparkSession = {
+  def createSparkWithCustomMetrics(appClazz: Class[_], pluginClazz: Class[_], args: Array[String], additionalArgs: String*): SparkSession = {
     val sparkConf: SparkConf = createSparkConf(appClazz, args, additionalArgs)
     sparkConf
       .set("spark.plugins", getClassName(pluginClazz))
       .set("spark.metrics.namespace", getClassSimpleName(appClazz))
+//      .set("spark.metrics.conf.*.sink.slf4j.class", "org.apache.spark.metrics.sink.ConsoleSink")
 
-      .set("spark.metrics.conf.*.sink.slf4j.class", "org.apache.spark.metrics.sink.Slf4jSink")
-      .set("spark.metrics.conf.*.sink.slf4j.period", "10")
-      .set("spark.metrics.conf.*.sink.slf4j.unit", "seconds")
+//      .set("spark.metrics.conf.*.sink.slf4j.class", "org.apache.spark.metrics.sink.Slf4jSink")
+//      .set("spark.metrics.conf.*.sink.slf4j.period", "10")
+//      .set("spark.metrics.conf.*.sink.slf4j.unit", "seconds")
 
-      //      .set("spark.metrics.conf.*.sink.csv.class", "org.apache.spark.metrics.sink.CsvSink")
-      //      .set("spark.metrics.conf.*.sink.csv.period", "5")
-      //      .set("spark.metrics.conf.*.sink.csv.unit", "seconds")
-      //      .set("spark.metrics.conf.*.sink.csv.directory", "/Users/sg0212148/dev/my-apache-spark-3-scala/target/csv")
-      //      .set("spark.metrics.conf.worker.sink.csv.period", "5")
-      //      .set("spark.metrics.conf.worker.sink.csv.unit", "seconds")
+      // Custom metrics sink require adding dependency with maven -Pcustom-metrics-sink -->
+//      .set("spark.metrics.conf.*.sink.mygcpmetric.class", "org.apache.spark.metrics.sink.MyGcpMetricSink")
+//      .set("spark.metrics.conf.*.sink.myconsole.class", "org.apache.spark.metrics.sink.MyConsoleSink")
 
-      .set("spark.metrics.conf.driver.source.jvm.class", "org.apache.spark.metrics.source.JvmSource")
 
-    //      .set("spark.metrics.conf", "metrics-slf4j.properties")
+//      .set("spark.metrics.conf.master.source.jvm.class", "org.apache.spark.metrics.source.JvmSource")
+//      .set("spark.metrics.conf.worker.source.jvm.class", "org.apache.spark.metrics.source.JvmSource")
+//      .set("spark.metrics.conf.driver.source.jvm.class", "org.apache.spark.metrics.source.JvmSource")
+//      .set("spark.metrics.conf.executor.source.jvm.class", "org.apache.spark.metrics.source.JvmSource")
+
+//          .set("spark.metrics.conf", "metrics-slf4j.properties")
+//          .set("spark.metrics.conf", "metrics-csv.properties")
     SparkSession.builder().config(sparkConf).getOrCreate()
   }
 
@@ -66,7 +69,7 @@ object SparkUtils {
     osName.contains("mac") || osName.contains("windows")
   }
 
-  def getClassName(clazz: Class[_]): String = {
+  private def getClassName(clazz: Class[_]): String = {
     val name = clazz.getName
     name.substring(0, name.lastIndexOf("$"))
   }
